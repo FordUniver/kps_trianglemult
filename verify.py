@@ -509,8 +509,8 @@ if __name__ == '__main__':
             assert all([v >= 0 for v in evs])
             
             tm = time.perf_counter() - tm
-            print (f"       found {sum([v == 0 for v in evs])} zero eigenvalues, no negative ones")
-            print(f"        done in in {tm:.1f}s")
+            print(f"       found {sum([v == 0 for v in evs])} zero eigenvalues, no negative ones")
+            print(f"       done in in {tm:.1f}s")
             
     
     if MP is not None:
