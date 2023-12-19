@@ -498,9 +498,9 @@ if __name__ == '__main__':
         tm = time.perf_counter() - tm
         print(f"    done in in {tm:.1f}s")
 
-        tm = time.perf_counter()
         print(f"  - verifying positive-semidefinitess for {ftype}")
         for BC in diag_matrices:
+            tm = time.perf_counter()
             Qd = matrix(QQ, BC.T * Q * BC, sparse=True)
             print (f"     * checking {Qd.nrows()}x{Qd.ncols()} block")
             
