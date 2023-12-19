@@ -439,6 +439,8 @@ if __name__ == '__main__':
     ##############################
     # Veriyfing constraint slack #
     
+    print(f"\nVerifying slack conditions...")
+    
     K33 = Coloring(6, ncolors=4, edge_colors=[0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2])
     K33.canonize(color_invariant=True)
 
@@ -475,7 +477,7 @@ if __name__ == '__main__':
     #######################################
     # Veriyfing positive semidefiniteness #
     
-    print(f"\nVerifying positive semidefinites..")
+    print(f"\nVerifying positive semidefinites...")
 
     for ftype, vals in certificate.items():
         
