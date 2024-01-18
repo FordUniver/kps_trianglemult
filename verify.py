@@ -1,6 +1,7 @@
 import os
 import time
 import yaml
+import pickle
 import numpy as np
 
 from collections import defaultdict
@@ -249,22 +250,91 @@ if __name__ == '__main__':
     if not args.disable_multiprocessing:
         from multiprocessing import Manager, Pool
         MP = Manager(), Pool()
-       
-    NVERTICES = 6
-    NCOLORINGS = {
-        3: 3,
-        4: 22,
-        5: 513,
-        6: 67685,
-    }
+    
+    while True:
+        theorem = input("\nWhich theorem do you want to verify (2.3 or 2.4)? ")
+        if theorem in ["2.3", "2.4", "cummingsetal", "goodman"]:
+            break
+        print("Invalid input. Please enter 2.3 or 2.4.")
+    
+    if theorem == '2.3':
+        NVERTICES = 6
+        NCOLORINGS = {
+            3: 3,
+            4: 22,
+            5: 513,
+            6: 67685,
+        }
+        NCOLORS = 4
+        CINV = True
+        
+        K33 = Coloring(6, ncolors=4, edge_colors=[0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2])
+        K33.canonize(color_invariant=CINV)
+
+        K31_1 = Coloring(4, ncolors=4, edge_colors=[0, 0, 0, 0, 0, 1])
+        K31_1.canonize(color_invariant=CINV)
+
+        K31_2 = Coloring(4, ncolors=4, edge_colors=[0, 0, 0, 0, 2, 1])
+        K31_2.canonize(color_invariant=CINV)
+
+        K31_3 = Coloring(4, ncolors=4, edge_colors=[0, 0, 2, 0, 2, 1])
+        K31_3.canonize(color_invariant=CINV)
+        
+        forbidden = [K33, K31_1, K31_2, K31_3]
+        target = QQ(1/256)
+        
+    elif theorem == '2.4':
+        NVERTICES = 6
+        NCOLORINGS = {5: 142, 6: 12796 }
+        NCOLORS = 3
+        CINV = ((0, 1), (2, ))
+        
+        forbidden = []
+        target = QQ(1/125)
+        
+    elif theorem == 'cummingsetal':
+        NVERTICES = 5
+        NCOLORINGS = { 5: 142, 6: 12796 }
+        NCOLORS = 3
+        CINV = True
+        
+        K33 = Coloring(6, ncolors=3, edge_colors=[0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2])
+        K33.canonize(color_invariant=CINV)
+
+        K31_1 = Coloring(4, ncolors=3, edge_colors=[0, 0, 0, 0, 0, 1])
+        K31_1.canonize(color_invariant=CINV)
+
+        K31_2 = Coloring(4, ncolors=3, edge_colors=[0, 0, 0, 0, 2, 1])
+        K31_2.canonize(color_invariant=CINV)
+
+        K31_3 = Coloring(4, ncolors=3, edge_colors=[0, 0, 2, 0, 2, 1])
+        K31_3.canonize(color_invariant=CINV)
+        
+        forbidden = [K33, K31_1, K31_2, K31_3]
+        
+        target = QQ(1/25)
+        
+    elif theorem == 'goodman':
+        NVERTICES = 3
+        NCOLORINGS = { 3: 2 }
+        NCOLORS = 2
+        CINV = True
+        
+        forbidden = []
+        
+        target = QQ(1/4)
+        
+    else:
+        raise ValueError
+
 
     ########################
     # Determine all graphs #
 
     tm = time.perf_counter()
-    print(f"\nDetermining the {NCOLORINGS[NVERTICES]} 4-edge-colorings of the complete graph of order {NVERTICES}...")
+    print(f"\nDetermining the {NCOLORINGS[NVERTICES]} {NCOLORS}-edge-colorings of the complete graph of order {NVERTICES}...")
 
-    colorings = get_colorings(NVERTICES, ncolors=4, color_invariant=True, mp=MP)
+    colorings = get_colorings(NVERTICES, ncolors=NCOLORS, color_invariant=CINV, mp=MP)
     colorings = sorted(colorings) # fix canonical order
 
     tm = time.perf_counter() - tm
@@ -277,8 +347,18 @@ if __name__ == '__main__':
     tm = time.perf_counter()
     print("\nDetermining values of colorings ...")
 
-    results = apply_pool(get_monochromatic_triangle_density, colorings, mp=MP)
-    values = {coloring: val for coloring, val in zip(colorings, results)}
+
+    if theorem in ['2.3', 'cummingsetal', 'goodman']:
+        results = apply_pool(get_monochromatic_triangle_density, colorings, mp=MP)
+        values = {coloring: val for coloring, val in zip(colorings, results)}
+        
+    elif theorem == '2.4':
+        results = apply_pool(get_triangle_quadrangle_density, colorings, mp=MP)
+        values = {coloring: val for coloring, val in zip(colorings, results)}
+        
+    else:
+        raise ValueError
+    
 
     tm = time.perf_counter() - tm
     print(f"Done in {tm:.1f}s.")
@@ -293,9 +373,9 @@ if __name__ == '__main__':
     tm = time.perf_counter()
     ftypes = {}
     for ftype_order in ftype_orders:
-        for ftype in get_colorings(ftype_order, ncolors=4, color_invariant=True, mp=MP, verbose=False):
-            automs = ftype.automorphisms(color_invariant=True)
-            ftype.make_ftype(color_invariant=True)
+        for ftype in get_colorings(ftype_order, ncolors=NCOLORS, color_invariant=CINV, mp=MP, verbose=False):
+            automs = ftype.automorphisms(color_invariant=CINV)
+            ftype.make_ftype(color_invariant=CINV)
             ftypes[ftype] = automs
     ftypes = {ftype: ftypes[ftype] for ftype in sorted(ftypes.keys())}
     tm = time.perf_counter() - tm
@@ -314,7 +394,7 @@ if __name__ == '__main__':
         flags[ftype] = sorted(get_colorings(
             get_max_flag_order(NVERTICES, ftype.nvertices),
             seeds=[ftype],
-            ncolors=4,
+            ncolors=NCOLORS,
             color_invariant=False,
             mp=MP,
             verbose=False))
@@ -335,8 +415,8 @@ if __name__ == '__main__':
                     for ftype, automorphisms in ftypes.items()]
     results = apply_pool(get_orbits, arguments, mp=MP, verbose=True)
 
-    for ftype, (os, pos, fg, fpg) in zip(ftypes, results):
-        orbits[ftype] = sorted([(sorted(o), m) for o, m in os])
+    for ftype, (obs, pos, fg, fpg) in zip(ftypes, results):
+        orbits[ftype] = sorted([(sorted(o), m) for o, m in obs])
         pair_orbits[ftype] = sorted([(sorted(o), m) for o, m in pos])
         flag_groups[ftype] = fg
         flag_pair_groups[ftype] = fpg
@@ -360,7 +440,7 @@ if __name__ == '__main__':
             for idxs in orbit:
                 orbit_map[ftype][idxs] = (oidx, mult)
 
-    arguments = [(coloring, flags, orbit_map, flowers, True)
+    arguments = [(coloring, flags, orbit_map, flowers, CINV)
                     for coloring in colorings]
     results = apply_pool(get_pair_densities, arguments, mp=MP, verbose=True)
     pair_densities = {c: val for c, val in zip(colorings, results)}
@@ -394,22 +474,20 @@ if __name__ == '__main__':
 
     tm = time.perf_counter() - tm
     print(f"Done in {tm:.1f}s.")
-    
+
     
     #######################
     # Loading certificate #
 
-    assert NVERTICES == 6, "The certificate is for N=6"
-
     tm = time.perf_counter()
     print(f"\nLoading the certificate...")
 
-    with open('certificate_22.yaml', 'r') as file:
+    with open(f"certificate_{theorem.replace('.','')}.yaml", 'r') as file:
         loaded_certificate = yaml.safe_load(file)
 
     tm = time.perf_counter() - tm
     print(f"Done in in {tm:.1f}s.")
-
+        
 
     ##########################
     # Processing certificate #
@@ -429,7 +507,7 @@ if __name__ == '__main__':
             certificate[ftype][index] = QQ(value)
 
             progressbar.update(int(1))
-
+            
     progressbar.close()
 
     tm = time.perf_counter() - tm
@@ -440,18 +518,6 @@ if __name__ == '__main__':
     # Veriyfing constraint slack #
     
     print(f"\nVerifying slack conditions...")
-    
-    K33 = Coloring(6, ncolors=4, edge_colors=[0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2])
-    K33.canonize(color_invariant=True)
-
-    K31_1 = Coloring(4, ncolors=4, edge_colors=[0, 0, 0, 0, 0, 1])
-    K31_1.canonize(color_invariant=True)
-
-    K31_2 = Coloring(4, ncolors=4, edge_colors=[0, 0, 0, 0, 2, 1])
-    K31_2.canonize(color_invariant=True)
-
-    K31_3 = Coloring(4, ncolors=4, edge_colors=[0, 0, 2, 0, 2, 1])
-    K31_3.canonize(color_invariant=True)
 
     for coloring in pbar(colorings):
         lam = values[coloring]
@@ -461,57 +527,69 @@ if __name__ == '__main__':
             for oidx, v in pd.items():
                 lam -= v * certificate[ftype].get(oidx, 0) * len(orbits[oidx][0])
                 
-        # Checking that 1/256 is the correct value
-        assert lam >= QQ(1/256), (lam, float(lam))
+        # Checking that target is the correct value
+        assert lam >= target, (lam, float(lam))
         
-        if lam == QQ(1/256):
+        if lam == target:
             coloring = Coloring.from_string(coloring)
         
             # Checking that any coloring attaining that value does not contain a forbidden subgraph
-            assert not coloring.contains_subcoloring(K33, color_invariant=True, is_canonical=True)
-            assert not coloring.contains_subcoloring(K31_1, color_invariant=True, is_canonical=True)
-            assert not coloring.contains_subcoloring(K31_2, color_invariant=True, is_canonical=True)
-            assert not coloring.contains_subcoloring(K31_3, color_invariant=True, is_canonical=True)
-            
+            for H in forbidden:
+                assert not coloring.contains_subcoloring(H, color_invariant=CINV, is_canonical=True)
+    
     
     #######################################
     # Veriyfing positive semidefiniteness #
     
     print(f"\nVerifying positive semidefinites...")
 
+    ldl_decomp = {}
+    
+    if theorem is not None and os.path.exists(f"ldl_{theorem.replace('.', '')}.pkl"):
+        with open(f"ldl_{theorem.replace('.', '')}.pkl", 'rb') as file:
+            ldl_decomp = pickle.load(file)
+
     for ftype, vals in certificate.items():
-        
-        flag_group = flag_groups[ftype]
-        nflags = len(flags[ftype])
-        
-        print(f"\n  - creating {nflags}x{nflags} Q-matrix for {ftype}")
-        Q = matrix(QQ, nflags, nflags, sparse=True)
+        if ftype not in ldl_decomp.keys():
+            flag_group = flag_groups[ftype]
+            nflags = len(flags[ftype])
+            
+            print(f"\n  - creating {nflags}x{nflags} Q-matrix for {ftype}")
+            Q = matrix(QQ, nflags, nflags, sparse=True)
 
-        for oidx, value in vals.items():
-            orbit, _ = pair_orbits[ftype][oidx]
-            for i, j in orbit:
-                Q[flags[ftype].index(i), flags[ftype].index(j)] = value
-        
-        tm = time.perf_counter()
-        print(f"  - getting diagonalization matrices for {ftype}")
-        diag_matrices = get_isotypic_diagonalization(flag_group, nflags)
-        tm = time.perf_counter() - tm
-        print(f"    done in in {tm:.1f}s")
-
-        print(f"  - verifying positive-semidefinitess for {ftype}")
-        for BC in diag_matrices:
+            for oidx, value in vals.items():
+                orbit, _ = pair_orbits[ftype][oidx]
+                for i, j in orbit:
+                    Q[flags[ftype].index(i), flags[ftype].index(j)] = value
+            
             tm = time.perf_counter()
-            Qd = matrix(QQ, BC.T * Q * BC, sparse=True)
-            print (f"     * checking {Qd.nrows()}x{Qd.ncols()} block")
-            
-            # Verifying positive semidefinites *exactly* and not numerically
-            evs = Qd.eigenvalues()
-            assert all([v >= 0 for v in evs])
-            
+            print(f"  - getting diagonalization matrices for {ftype}")
+            diag_matrices = get_isotypic_diagonalization(flag_group, nflags)
             tm = time.perf_counter() - tm
-            print(f"       found {sum([v == 0 for v in evs])} zero eigenvalues, no negative ones")
-            print(f"       done in in {tm:.1f}s")
+            print(f"    done in in {tm:.1f}s")
+
+            print(f"  - verifying positive-semidefinitess for {ftype}")
+            for BC in diag_matrices:
+                tm = time.perf_counter()
+                Qd = matrix(QQ, BC.T * Q * BC, sparse=True)
+                print (f"     * computing LDL decomp of {Qd.nrows()}x{Qd.ncols()} block")
+                
+                # Verifying positive semidefinites *exactly* and not numerically
+                evs = Qd.eigenvalues()
+                assert all([v >= 0 for v in evs]), evs
+                # P, L, D = Q.block_ldlt()
+                
+                # L * D * L.transpose() = P.transpose() * QD * P = P.transpose() * BC.T * Q * BC*P
+                
+                tm = time.perf_counter() - tm
+                print(f"       done in in {tm:.1f}s")
+                
+            # ldl_decomp[ftype] = ...
             
+    #     P, L, D = ldl_decomp[ftype]
+    #     assert P.transpose()*Q*P == L*D*L.transpose()
+    #     assert all(d >= 0 for d in D.diagonal())
+    #     print(f"\n  - found {sum(d == 0 for d in D.diagonal())} zero evs for {ftype}, no negative ones")
     
     if MP is not None:
         _, pool = MP

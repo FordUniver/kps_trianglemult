@@ -1010,15 +1010,13 @@ def get_colorings(
 
 def get_monochromatic_triangle_density(
         coloring,
-        color_invariant: Union[bool, Tuple[Tuple[int]]] = True,
-        injective: bool = True):
+        color_invariant: Union[bool, Tuple[Tuple[int]]] = True):
     """
     Computes the density of monochromatic triangles in a given coloring.
 
     Parameters:
     coloring (Coloring or str): The coloring or its string representation.
     color_invariant (bool or Tuple[Tuple[int]]): Color invariant specification.
-    injective (bool): Whether to consider injective colorings only.
 
     Returns:
     The density of monochromatic triangles in the given coloring.
@@ -1038,17 +1036,61 @@ def get_monochromatic_triangle_density(
 
     count, total = 0, 0
 
-    for S in combinations(coloring.vertices, 3) if injective else \
-            combinations_with_replacement(coloring.vertices, 3):
+    for S in combinations(coloring.vertices, 3):
         H = coloring.subcoloring(S, as_vertices=True)
         H.canonize(color_invariant=color_invariant)
 
-        mult = 1 if injective else multinomial(list(Counter(S).values()))
-        total += mult
+        total += 1
 
         if str(H) in monochromatic_triangles:
-            count += mult
+            count += 1
 
-    value = QQ(count / total)
+    return QQ(count / total)
 
-    return value
+
+
+def get_triangle_quadrangle_density(coloring):
+    """
+    Computes the density required for Theorem 2.3.
+
+    Parameters:
+    coloring (Coloring or str): The coloring or its string representation.
+    color_invariant (bool or Tuple[Tuple[int]]): Color invariant specification.
+
+    Returns:
+    The density of monochromatic triangles and quadrangles in the given coloring.
+    """
+
+    if isinstance(coloring, str):
+        coloring = Coloring.from_string(coloring)
+
+    assert coloring.ncolors == 3
+
+
+    triangle = Coloring(3, ncolors=coloring.ncolors, edge_colors=[0, 0, 0])
+    triangle.canonize(color_invariant=((0, 1), (2,)))
+    
+    quadrangle = Coloring(4, ncolors=coloring.ncolors, edge_colors=[2, 2, 2, 2, 2, 2])
+    quadrangle.canonize(color_invariant=((0, 1), (2,)))
+    
+    triangle_count, triangle_total = 0, 0
+    for S in combinations(coloring.vertices, 3):
+        H = coloring.subcoloring(S, as_vertices=True)
+        H.canonize(color_invariant=((0, 1), (2,)))
+
+        triangle_total += 1
+
+        if H == triangle:
+            triangle_count += 1
+
+    quadruple_count, quadruple_total = 0, 0
+    for S in combinations(coloring.vertices, 4):
+        H = coloring.subcoloring(S, as_vertices=True)
+        H.canonize(color_invariant=((0, 1), (2,)))
+
+        quadruple_total += 1
+
+        if H == triangle:
+            quadruple_count += 1
+
+    return QQ(triangle_total / triangle_total) + QQ(quadruple_count / quadruple_total)
