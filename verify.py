@@ -659,7 +659,7 @@ if __name__ == '__main__':
             print(f"       block is positive semidefinite ✅")
             
             tm = time.perf_counter() - tm
-            print(f"        in {tm:.1f}s")
+            print(f"       done in {tm:.1f}s")
             
         assert nzev == len(known_zevs.get(ftype, [])), f"       Found {nzev} zero eigenvalue(s) (should be {len(known_zevs.get(ftype, []))}) ❌"
         print(f"    found exactly {nzev} zero eigenvalue(s) ✅\n")
