@@ -7,7 +7,7 @@ import numpy as np
 from collections import defaultdict
 from itertools import combinations_with_replacement
 from typing import Optional, List, Tuple, Dict, Any, Union
-from sage.all import PermutationGroup, QQ, real, imag, matrix
+from sage.all import PermutationGroup, QQ, RR, real, imag, matrix, vector
 from utilities import *
 
 import sys
@@ -445,14 +445,8 @@ if __name__ == '__main__':
     results = apply_pool(get_pair_densities, arguments, mp=MP, verbose=True)
     pair_densities = {c: val for c, val in zip(colorings, results)}
 
-    print(f"Done in {time.perf_counter() - tm:.1f}s")
 
-
-    #######################################################################
-    # Turn everything into string representation and give canonical order #
-
-    tm = time.perf_counter()
-    print("\nConverting to string representation and fixing order ...")
+    # Turn everything into string representation and give canonical order 
 
     orbits = {str(ftype): [([str(flag) for flag in orbit], m)
                 for orbit, m in orbits[ftype]] for ftype in ftypes}
@@ -474,19 +468,6 @@ if __name__ == '__main__':
 
     tm = time.perf_counter() - tm
     print(f"Done in {tm:.1f}s.")
-
-    
-    #######################
-    # Loading certificate #
-
-    tm = time.perf_counter()
-    print(f"\nLoading the certificate...")
-
-    with open(f"certificate_{theorem.replace('.','')}.yaml", 'r') as file:
-        loaded_certificate = yaml.safe_load(file)
-
-    tm = time.perf_counter() - tm
-    print(f"Done in in {tm:.1f}s.")
         
 
     ##########################
@@ -494,6 +475,9 @@ if __name__ == '__main__':
 
     tm = time.perf_counter()
     print(f"\nProcessing the certificate...")
+
+    with open(f"certificates/certificate_{theorem.replace('.','')}.yaml", 'r') as file:
+        loaded_certificate = yaml.safe_load(file)
 
     total_iterations = sum(len(v) for v in loaded_certificate.values())
     progressbar = get_pbar(total=int(total_iterations))
@@ -515,9 +499,11 @@ if __name__ == '__main__':
     
     
     ##############################
-    # Veriyfing constraint slack #
+    # Verifying constraint slack #
     
     print(f"\nVerifying slack conditions...")
+
+    found_sharp = False
 
     for coloring in pbar(colorings):
         lam = values[coloring]
@@ -530,6 +516,8 @@ if __name__ == '__main__':
         # Checking that target is the correct value
         assert lam >= target, (lam, float(lam))
         
+        found_sharp = found_sharp or lam == target
+        
         if lam == target:
             coloring = Coloring.from_string(coloring)
         
@@ -537,54 +525,124 @@ if __name__ == '__main__':
             for H in forbidden:
                 assert not coloring.contains_subcoloring(H, color_invariant=CINV, is_canonical=True)
     
+    assert found_sharp
     
-    #######################################
-    # Veriyfing positive semidefiniteness #
+    print(f"The value is {target} and the correct graphs are sharp ✅")
     
-    print(f"\nVerifying positive semidefinites...")
-
-    ldl_decomp = {}
     
-    if theorem is not None and os.path.exists(f"ldl_{theorem.replace('.', '')}.pkl"):
-        with open(f"ldl_{theorem.replace('.', '')}.pkl", 'rb') as file:
-            ldl_decomp = pickle.load(file)
+    ####################################
+    # Verifying known zero eigenvalues #
+    
+    tm = time.perf_counter()
+    print(f"\nVerifying known zero_eigenvalues...")
+    
+    Q_matrices = {}
 
     for ftype, vals in certificate.items():
-        if ftype not in ldl_decomp.keys():
-            flag_group = flag_groups[ftype]
-            nflags = len(flags[ftype])
+        flag_group = flag_groups[ftype]
+        nflags = len(flags[ftype])
+        
+        tm = time.perf_counter()
+        Q_matrices[ftype] = matrix(QQ, nflags, nflags, sparse=True)
+    
+        for oidx, value in vals.items():
+            orbit, _ = pair_orbits[ftype][oidx]
+            for i, j in orbit:
+                 Q_matrices[ftype][flags[ftype].index(i), flags[ftype].index(j)] = value
+        
+    with open(f"certificates/known_zevs_{theorem.replace('.','')}.yaml", 'r') as file:
+        temp = yaml.safe_load(file)
+       
+    known_zevs = {str(k): [vector([QQ(x) for x in zev]) for zev in v] for k, v in temp.items()} 
+    
+    for ftype, vals in certificate.items():
+        zevs = known_zevs.get(ftype, [])
+        nflags = len(flags[ftype])
+        
+        zev_matrix = matrix(QQ, zevs)
+        
+        assert zev_matrix.rank() == zev_matrix.nrows() == len(zevs)
+        
+        for zev in zevs:
+            assert Q_matrices[ftype]*zev == vector([0 for _ in range(nflags)])
+            assert zev*Q_matrices[ftype]*zev == 0
             
-            print(f"\n  - creating {nflags}x{nflags} Q-matrix for {ftype}")
-            Q = matrix(QQ, nflags, nflags, sparse=True)
+        print(f"  - {ftype} has {len(zevs)} known linearly independent zero eigenvalue(s) ✅")
 
-            for oidx, value in vals.items():
-                orbit, _ = pair_orbits[ftype][oidx]
-                for i, j in orbit:
-                    Q[flags[ftype].index(i), flags[ftype].index(j)] = value
-            
+    tm = time.perf_counter() - tm
+    print(f"Done in in {tm:.1f}s.")
+    
+    
+    ###################################################
+    # Verifying positive semidefiniteness numerically #
+    
+    tolerance = 1e-6
+    
+    print(f"\nVerifying positive semidefinites numerically up to a tolerance of {tolerance} ...")
+    tm = time.perf_counter()
+
+    for ftype, vals in certificate.items():
+        zevs = known_zevs.get(ftype, [])
+        flag_group = flag_groups[ftype]
+        nflags = len(flags[ftype])
+        
+        evs = np.linalg.eigvals(Q_matrices[ftype])
+        
+        nzev = sum([v <= tolerance for v in evs])
+        if nzev == len(zevs):
+            print(f"  - {ftype} has {len(zevs)} zero eigenvalue(s) ✅")
+        else:
+            print(f"  - {ftype} has {nzev} zero eigenvalue(s) (should be {len(zevs)}) ❌")
+        
+        
+    tm = time.perf_counter() - tm
+    print(f"Done in in {tm:.1f}s")
+
+    #######################################
+    # Verifying positive semidefiniteness #
+    
+    print(f"\nVerifying positive semidefinites algebraically...")
+
+    # ldl_decomp = {}
+    
+    # if theorem is not None and os.path.exists(f"ldl_{theorem.replace('.', '')}.pkl"):
+    #     with open(f"ldl_{theorem.replace('.', '')}.pkl", 'rb') as file:
+    #         ldl_decomp = pickle.load(file)
+
+    for ftype, vals in certificate.items():
+        tm = time.perf_counter()
+        
+        # if ftype not in ldl_decomp.keys():
+        flag_group = flag_groups[ftype]
+        nflags = len(flags[ftype])
+        
+        print(f"  - getting diagonalization matrices for {ftype}")
+        diag_matrices = get_isotypic_diagonalization(flag_group, nflags)
+        tm = time.perf_counter() - tm
+        print(f"    done in in {tm:.1f}s")
+
+        print(f"  - verifying positive-semidefinitess for {ftype}")
+        for BC in diag_matrices:
             tm = time.perf_counter()
-            print(f"  - getting diagonalization matrices for {ftype}")
-            diag_matrices = get_isotypic_diagonalization(flag_group, nflags)
+            Qd = matrix(QQ, BC.T * Q_matrices[ftype] * BC, sparse=True)
+            print (f"     * computing LDL decomp of {Qd.nrows()}x{Qd.ncols()} block")
+            
+            # Verifying positive semidefinites *exactly* and not numerically
+            evs = Qd.eigenvalues()
+            # assert all([v >= 0 for v in evs]), evs
+            
+            if not  all([v >= 0 for v in evs]):
+                print(f"       found {sum(v < 0 for v in evs)} negative evs for {ftype} ❌")
+            else:
+                print(f"       no negative evs found for {ftype} ✅")
+            # P, L, D = Q.block_ldlt()
+            
+            # L * D * L.transpose() = P.transpose() * QD * P = P.transpose() * BC.T * Q * BC*P
+            
             tm = time.perf_counter() - tm
-            print(f"    done in in {tm:.1f}s")
-
-            print(f"  - verifying positive-semidefinitess for {ftype}")
-            for BC in diag_matrices:
-                tm = time.perf_counter()
-                Qd = matrix(QQ, BC.T * Q * BC, sparse=True)
-                print (f"     * computing LDL decomp of {Qd.nrows()}x{Qd.ncols()} block")
-                
-                # Verifying positive semidefinites *exactly* and not numerically
-                evs = Qd.eigenvalues()
-                assert all([v >= 0 for v in evs]), evs
-                # P, L, D = Q.block_ldlt()
-                
-                # L * D * L.transpose() = P.transpose() * QD * P = P.transpose() * BC.T * Q * BC*P
-                
-                tm = time.perf_counter() - tm
-                print(f"       done in in {tm:.1f}s")
-                
-            # ldl_decomp[ftype] = ...
+            print(f"       done in in {tm:.1f}s")
+            
+        # ldl_decomp[ftype] = ...
             
     #     P, L, D = ldl_decomp[ftype]
     #     assert P.transpose()*Q*P == L*D*L.transpose()
