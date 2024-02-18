@@ -570,13 +570,13 @@ if __name__ == '__main__':
         print(f"  - {ftype} has {len(zevs)} known linearly independent zero eigenvalue(s) ✅")
 
     tm = time.perf_counter() - tm
-    print(f"Done in in {tm:.1f}s.")
+    # print(f"Done in {tm:.1f}s.")
     
     
     ###################################################
     # Verifying positive semidefiniteness numerically #
     
-    tolerance = 1e-5
+    tolerance = 1e-6
     
     print(f"\nVerifying positive semidefinites numerically up to a tolerance of {tolerance} ...")
     tm = time.perf_counter()
@@ -596,12 +596,12 @@ if __name__ == '__main__':
         
         
     tm = time.perf_counter() - tm
-    print(f"Done in in {tm:.1f}s")
+    # print(f"Done in in {tm:.1f}s")
 
     #######################################
     # Verifying positive semidefiniteness #
     
-    print(f"\nVerifying positive semidefinites algebraically...")
+    print(f"\nVerifying positive semidefinites algebraically...\n")
     
     for ftype, vals in certificate.items():
         tm = time.perf_counter()
@@ -610,12 +610,15 @@ if __name__ == '__main__':
         flag_group = flag_groups[ftype]
         nflags = len(flags[ftype])
         
-        print(f"  - getting diagonalization matrices for {ftype}")
+        print(f"Checking block for type {ftype}")
+        print(f"  - getting diagonalization matrices")
         diag_matrices = get_isotypic_diagonalization(flag_group, nflags)
         tm = time.perf_counter() - tm
-        print(f"    done in in {tm:.1f}s")
+        print(f"     in {tm:.1f}s")
 
-        print(f"  - verifying positive-semidefinitess for {ftype}")
+        nzev = 0
+
+        print(f"  - verifying positive-semidefinitess")
         for idx, BC in enumerate(diag_matrices):
             tm = time.perf_counter()
             Qd = matrix(QQ, BC.T * Q_matrices[ftype] * BC, sparse=True)
@@ -651,12 +654,15 @@ if __name__ == '__main__':
             assert P.T*Qd*P == L*D*L.T
             assert all(d >= 0 for d in D.diagonal()), "       block is not positive semidefinite ❌"
             
+            nzev += sum([d == 0 for d in D.diagonal()])
+            
             print(f"       block is positive semidefinite ✅")
             
             tm = time.perf_counter() - tm
-            print(f"       done in in {tm:.1f}s")
+            print(f"        in {tm:.1f}s")
             
-    print()
+        assert nzev == len(known_zevs.get(ftype, [])), f"       Found {nzev} zero eigenvalue(s) (should be {len(known_zevs.get(ftype, []))}) ❌"
+        print(f"    found exactly {nzev} zero eigenvalue(s) ✅\n")
             
     if MP is not None:
         _, pool = MP
