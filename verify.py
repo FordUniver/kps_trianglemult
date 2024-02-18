@@ -590,9 +590,9 @@ if __name__ == '__main__':
         
         nzev = sum([v <= tolerance for v in evs])
         if nzev == len(zevs):
-            print(f"  - {ftype} has {len(zevs)} zero eigenvalue(s) ✅")
+            print(f"  - {ftype} seems to have {len(zevs)} zero eigenvalue(s) ✅")
         else:
-            print(f"  - {ftype} has {nzev} zero eigenvalue(s) (should be {len(zevs)}) ❌")
+            print(f"  - {ftype} seems to have {nzev} zero eigenvalue(s) (should be {len(zevs)}) ❌")
         
         
     tm = time.perf_counter() - tm
