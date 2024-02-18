@@ -576,7 +576,7 @@ if __name__ == '__main__':
     ###################################################
     # Verifying positive semidefiniteness numerically #
     
-    tolerance = 1e-6
+    tolerance = 1e-5
     
     print(f"\nVerifying positive semidefinites numerically up to a tolerance of {tolerance} ...")
     tm = time.perf_counter()
@@ -602,13 +602,7 @@ if __name__ == '__main__':
     # Verifying positive semidefiniteness #
     
     print(f"\nVerifying positive semidefinites algebraically...")
-
-    # ldl_decomp = {}
     
-    # if theorem is not None and os.path.exists(f"ldl_{theorem.replace('.', '')}.pkl"):
-    #     with open(f"ldl_{theorem.replace('.', '')}.pkl", 'rb') as file:
-    #         ldl_decomp = pickle.load(file)
-
     for ftype, vals in certificate.items():
         tm = time.perf_counter()
         
@@ -622,33 +616,48 @@ if __name__ == '__main__':
         print(f"    done in in {tm:.1f}s")
 
         print(f"  - verifying positive-semidefinitess for {ftype}")
-        for BC in diag_matrices:
+        for idx, BC in enumerate(diag_matrices):
             tm = time.perf_counter()
             Qd = matrix(QQ, BC.T * Q_matrices[ftype] * BC, sparse=True)
-            print (f"     * computing LDL decomp of {Qd.nrows()}x{Qd.ncols()} block")
             
-            # Verifying positive semidefinites *exactly* and not numerically
-            evs = Qd.eigenvalues()
-            # assert all([v >= 0 for v in evs]), evs
+            decomp_file = f"certificates/decomp/{theorem.replace('.','')}/{ftype}_{idx}.yaml"
             
-            if not  all([v >= 0 for v in evs]):
-                print(f"       found {sum(v < 0 for v in evs)} negative evs for {ftype} ❌")
+            if not os.path.isfile(decomp_file):
+                print (f"     * computing LDL decomp of {Qd.nrows()}x{Qd.ncols()} block")
+                P, L, D = Qd.block_ldlt()
+                P_list = [[i, j, str(P[i, j])] for i, j in P.nonzero_positions()]
+                L_list = [[i, j, str(L[i, j])] for i, j in L.nonzero_positions()]
+                D_list = [[i, j, str(D[i, j])] for i, j in D.nonzero_positions()]
+                os.makedirs(f"certificates/decomp/{theorem.replace('.','')}", exist_ok=True)
+                with open(decomp_file, 'w') as file:
+                    yaml.dump([P_list, L_list, D_list], file, default_flow_style=True)
+                    
             else:
-                print(f"       no negative evs found for {ftype} ✅")
-            # P, L, D = Q.block_ldlt()
+                print (f"     * loading LDL decomp of {Qd.nrows()}x{Qd.ncols()} block")
+                with open(decomp_file, 'r') as file:
+                    P_list, L_list, D_list = yaml.safe_load(file)
+
+                P = matrix(QQ, Qd.nrows(), Qd.ncols(), sparse=True)
+                L = matrix(QQ, Qd.nrows(), Qd.ncols(), sparse=True)
+                D = matrix(QQ, Qd.nrows(), Qd.ncols(), sparse=True)
+
+                for i, j, val in P_list:
+                    P[i, j] = QQ(val)
+                for i, j, val in L_list:
+                    L[i, j] = QQ(val)
+                for i, j, val in D_list:
+                    D[i, j] = QQ(val)
+                
+            assert P.T*Qd*P == L*D*L.T
+            assert all(d >= 0 for d in D.diagonal()), "       block is not positive semidefinite ❌"
             
-            # L * D * L.transpose() = P.transpose() * QD * P = P.transpose() * BC.T * Q * BC*P
+            print(f"       block is positive semidefinite ✅")
             
             tm = time.perf_counter() - tm
             print(f"       done in in {tm:.1f}s")
             
-        # ldl_decomp[ftype] = ...
+    print()
             
-    #     P, L, D = ldl_decomp[ftype]
-    #     assert P.transpose()*Q*P == L*D*L.transpose()
-    #     assert all(d >= 0 for d in D.diagonal())
-    #     print(f"\n  - found {sum(d == 0 for d in D.diagonal())} zero evs for {ftype}, no negative ones")
-    
     if MP is not None:
         _, pool = MP
         pool.close()
